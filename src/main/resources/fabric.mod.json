@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "skyblockmulti_waystones",
+  "version": "${version}",
+  "name": "SM Addon: Waystone",
+  "description": "Independent, configurable starter Waystone and personal Infernal Trial crafting materials for Skyblock Multi.",
+  "authors": ["Treecs"],
+  "license": "MIT",
+  "environment": "*",
+  "icon": "assets/skyblockmulti_waystones/icon.png",
+  "entrypoints": {"main": ["cl.treecs.smwaystones.SmWaystonesAddon"]},
+  "depends": {
+    "java": ">=25",
+    "minecraft": "26.3",
+    "fabricloader": ">=0.20.1",
+    "fabric-api": ">=0.165.2+26.3",
+    "skyblockmulti": ">=0.2.4-v042-beta",
+    "waystones": ">=26.3.0.2",
+    "cloth-config": ">=26.3.159"
+  },
+  "custom": {
+    "skyblockmulti": {
+      "addon_features": [
+        {
+          "id": "starter_waystone",
+          "type": "starter_chest",
+          "name_translation_key": "skyblockmulti_waystones.config.starter_waystone",
+          "enabled_by_default": false,
+          "reload_required": false
+        },
+        {
+          "id": "infernal_trial_loot",
+          "type": "challenge_loot",
+          "name_translation_key": "skyblockmulti_waystones.config.infernal_trial_loot",
+          "enabled_by_default": true,
+          "reload_required": false
+        }
+      ]
+    }
+  }
+}

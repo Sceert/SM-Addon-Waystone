@@ -1,0 +1,99 @@
+plugins { id 'net.fabricmc.fabric-loom' version "${loom_version}" }
+version = project.mod_version
+group = 'cl.treecs'
+base { archivesName = 'SM-Addon-Waystone' }
+repositories {
+    maven { url = 'https://api.modrinth.com/maven' }
+    maven { url = 'https://maven.shedaniel.me/' }
+}
+def coreProperties = new Properties()
+file('../SkyblockMulti/gradle.properties').withInputStream { coreProperties.load(it) }
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+    implementation "maven.modrinth:waystones:FHxw949T"
+    implementation files("../SkyblockMulti/build/libs/Skyblock-Multi-${coreProperties.mod_version}.jar")
+    runtimeOnly "maven.modrinth:balm:MYj31XNG"
+    runtimeOnly "maven.modrinth:shogi:9gkJoFhj"
+    runtimeOnly("me.shedaniel.cloth:cloth-config-fabric:26.3.159") { transitive = false }
+    if (project.hasProperty('upgradeSuite')) {
+        def partiesProperties = new Properties()
+        file('../Nexus Parties/gradle.properties').withInputStream { partiesProperties.load(it) }
+        def bopProperties = new Properties()
+        file('../SM Addon BOP/gradle.properties').withInputStream { bopProperties.load(it) }
+        runtimeOnly files("../Nexus Parties/build/libs/nexus-parties-${partiesProperties.version}.jar")
+        runtimeOnly files("../SM Addon BOP/build/libs/SM-Addon-Biomes-O-Plenty-${bopProperties.mod_version}.jar")
+        runtimeOnly 'maven.modrinth:biomes-o-plenty:sbAVJ5Mn'
+        runtimeOnly 'maven.modrinth:glitchcore:kfFeDnrp'
+        runtimeOnly 'maven.modrinth:terrablender:xirJYe1V'
+    }
+}
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') { expand(version: project.version) }
+}
+java { sourceCompatibility = JavaVersion.VERSION_25; targetCompatibility = JavaVersion.VERSION_25; withSourcesJar() }
+tasks.withType(JavaCompile).configureEach { options.release = 25 }
+jar { from('LICENSE') }
+tasks.register('verifyResources') {
+    inputs.dir('src/main/resources')
+    outputs.file(layout.buildDirectory.file('verification/resources.passed'))
+    doLast {
+        def parser = new groovy.json.JsonSlurper()
+        def metadata = parser.parse(file('src/main/resources/fabric.mod.json'))
+        def features = metadata.custom.skyblockmulti.addon_features
+        assert features*.id == ['starter_waystone', 'infernal_trial_loot']
+        assert features*.enabled_by_default == [false, true]
+        assert features*.type == ['starter_chest', 'challenge_loot']
+        def locales = fileTree('src/main/resources/assets/skyblockmulti_waystones/lang').files
+        assert locales.size() == 13
+        locales.each { locale ->
+            def lang = parser.parse(locale)
+            features.each { assert lang[it.name_translation_key] }
+        }
+        def marker = layout.buildDirectory.file('verification/resources.passed').get().asFile
+        marker.parentFile.mkdirs(); marker.text = 'passed\n'
+    }
+}
+check.dependsOn verifyResources
+test { failOnNoDiscoveredTests = false }
+tasks.register('verifyBalance', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'cl.treecs.smwaystones.BalanceVerification'
+    inputs.files(sourceSets.test.output, sourceSets.main.output)
+    outputs.file(layout.buildDirectory.file('verification/balance.passed'))
+    doLast {
+        def marker = layout.buildDirectory.file('verification/balance.passed').get().asFile
+        marker.parentFile.mkdirs(); marker.text = 'passed\n'
+    }
+}
+check.dependsOn verifyBalance
+
+// Opt-in integration harness; never packaged in the distributed addon.
+if (project.hasProperty('integrationTest')) {
+    loom {
+        mods {
+            skyblockmulti_waystones { sourceSet sourceSets.main }
+            integration_test { sourceSet sourceSets.test }
+        }
+        runs {
+            server {
+                source sourceSets.test
+                runDir "build/run-integration-${project.minecraft_version}"
+                programArg 'nogui'
+                vmArg '-Dsmwaystones.integration=true'
+                if (project.hasProperty('upgradeSuite')) vmArg '-Dsmwaystones.upgradeSuite=true'
+            }
+        }
+    }
+    tasks.named('runServer') {
+        doLast {
+            assert file("build/run-integration-${project.minecraft_version}/logs/latest.log").text.contains('SM Addon: Waystone INTEGRATION PASSED') : 'Server integration checks failed; inspect latest.log'
+            if (project.hasProperty('upgradeSuite')) {
+                assert file("build/run-integration-${project.minecraft_version}/logs/latest.log").text.contains('UPGRADE SUITE PASSED:') : 'Combined upgrade checks failed'
+            }
+        }
+    }
+}
